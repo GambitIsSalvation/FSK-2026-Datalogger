@@ -1,0 +1,6 @@
+../Core/Src/ringbuffer.c:12:5:IsWriteAvailable	2
+../Core/Src/ringbuffer.c:23:5:IsPopAvailable	2
+../Core/Src/ringbuffer.c:34:6:RingFrontIncrement	1
+../Core/Src/ringbuffer.c:40:6:RingEndIncrement	1
+../Core/Src/ringbuffer.c:46:11:RingPop	1
+../Core/Src/ringbuffer.c:52:6:RingPush	1
