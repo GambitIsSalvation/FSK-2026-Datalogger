@@ -1,0 +1,7 @@
+../Core/Src/APPS.c:24:14:absf	16	static
+../Core/Src/APPS.c:27:14:adc_to_v	16	static
+../Core/Src/APPS.c:33:13:in_range	24	static
+../Core/Src/APPS.c:39:14:v_to_pct	24	static
+../Core/Src/APPS.c:47:13:show_output	16	static
+../Core/Src/APPS.c:56:6:APPS	32	static
+../Core/Src/APPS.c:117:10:get_p	4	static

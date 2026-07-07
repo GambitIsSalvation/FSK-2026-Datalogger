@@ -1,10 +1,12 @@
 #include "ringbuffer.h"
 #include "can.h"
+#include "VehicleState.h"
 
 // Ring Buffer Variabels //
 RxMessage ringbuffer[RINGBUFFER_SIZE]; // 링 버퍼 정의
 volatile uint8_t r_front = 0;
 volatile uint8_t r_end = 0;
+int16_t raw = 0;
 
 
 // Ring Buffer Functions //
@@ -55,3 +57,70 @@ void RingPush(RxMessage input) // 링 버퍼에 데이터 입력
 	RingFrontIncrement();
 	return;
 }
+
+void Classifier(VehicleState* VS, RxMessage received)
+{
+	switch(received.RxHeader.StdId)
+	{
+	// Motor Controller Loging Data
+	case MOTORX:
+		switch(received.RxData[0])
+		{
+		case RPM_COMMAND:
+			raw = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
+			VS->rpm_command = ((int32_t)raw * NMAX) / 32767;
+			//VS->rpm_command = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
+			break;
+
+		case RPM_ACTUAL:
+			raw = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
+			VS->rpm = ((int32_t)raw * NMAX) / 32767;
+			//VS->rpm = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
+			break;
+
+		case IQ_COMMAND:
+			VS->iq_command = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
+			break;
+
+		case IQ_ACTUAL:
+			VS->iq_actual = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
+			break;
+
+		case V_OUT:
+			VS->inv_vout = (received.RxData[2] << 8) | received.RxData[1];
+			break;
+
+		case V_IN:
+			VS->inv_vin = (received.RxData[2] << 8) | received.RxData[1];
+			break;
+
+		case T_CTRL:
+			VS->ctrl_temp = (received.RxData[2] << 8) | received.RxData[1];
+			break;
+
+		case T_MOTOR:
+			VS->mtr_temp = (received.RxData[2] << 8) | received.RxData[1];
+			break;
+		}
+		break;
+
+	// BMS Loging Data
+	case BMSRX_1:
+		VS->hcv = received.RxData[0];
+		VS->lcv = received.RxData[1];
+		VS->htp = received.RxData[2];
+		VS->ltp = received.RxData[3];
+		VS->soc = received.RxData[4];
+		VS->current = received.RxData[5];
+		VS->voltage = received.RxData[6];
+		break;
+
+	case BMSRX_2:
+		VS->bms_error = ((uint32_t)received.RxData[0])
+						| ((uint32_t)received.RxData[1] << 8)
+						| ((uint32_t)received.RxData[2] << 16)
+						| ((uint32_t)(received.RxData[3] & 0x07) << 24);
+		break;
+	}
+}
+

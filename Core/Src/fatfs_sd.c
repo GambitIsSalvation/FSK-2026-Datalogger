@@ -268,7 +268,18 @@ DSTATUS SD_disk_initialize(BYTE drv)
 
 	/* check disk type */
 	type = 0;
+/*
+	uint8_t r0 = SD_SendCmd(CMD0, 0);
+	printf("CMD0 = 0x%02X (expect 0x01)\n", r0);
 
+	if (r0 == 1)
+	{
+	    Timer1 = 1000;
+	    uint8_t r8 = SD_SendCmd(CMD8, 0x1AA);
+	    printf("CMD8 = 0x%02X (expect 0x01)\n", r8);
+	    // ... 기존 코드에서 SD_SendCmd(CMD8, 0x1AA) 호출을 r8로 대체
+	}
+*/
 	/* send GO_IDLE_STATE command */
 	if (SD_SendCmd(CMD0, 0) == 1)
 	{

@@ -1,0 +1,7 @@
+../Core/Src/APPS.c:24:14:absf	2
+../Core/Src/APPS.c:27:14:adc_to_v	1
+../Core/Src/APPS.c:33:13:in_range	3
+../Core/Src/APPS.c:39:14:v_to_pct	3
+../Core/Src/APPS.c:47:13:show_output	2
+../Core/Src/APPS.c:56:6:APPS	9
+../Core/Src/APPS.c:117:10:get_p	1

@@ -116,24 +116,37 @@ int GPS_validate(char *nmeastr){
 }
 
 void GPS_parse(char *GPSstrParse){
-    if(!strncmp(GPSstrParse, "$GPGGA", 6)){
-    	if (sscanf(GPSstrParse, "$GPGGA,%f,%f,%c,%f,%c,%d,%d,%f,%f,%c", &GPS.utc_time, &GPS.nmea_latitude, &GPS.ns, &GPS.nmea_longitude, &GPS.ew, &GPS.lock, &GPS.satelites, &GPS.hdop, &GPS.msl_altitude, &GPS.msl_units) >= 1){
-    		GPS.dec_latitude = GPS_nmea_to_dec(GPS.nmea_latitude, GPS.ns);
-    		GPS.dec_longitude = GPS_nmea_to_dec(GPS.nmea_longitude, GPS.ew);
-    		return;
-    	}
+    // "$GPGGA" 든 "$GNGGA" 든 뒤 3글자(GGA)로 판별
+    if(!strncmp(&GPSstrParse[3], "GGA", 3)){
+        // $ + (GP/GN 2글자를 %*2c로 건너뜀) + GGA
+        if (sscanf(GPSstrParse, "$%*2cGGA,%f,%f,%c,%f,%c,%d,%d,%f,%f,%c",
+                   &GPS.utc_time, &GPS.nmea_latitude, &GPS.ns,
+                   &GPS.nmea_longitude, &GPS.ew, &GPS.lock,
+                   &GPS.satelites, &GPS.hdop, &GPS.msl_altitude,
+                   &GPS.msl_units) >= 1){
+            GPS.dec_latitude  = GPS_nmea_to_dec(GPS.nmea_latitude, GPS.ns);
+            GPS.dec_longitude = GPS_nmea_to_dec(GPS.nmea_longitude, GPS.ew);
+            return;
+        }
     }
-    else if (!strncmp(GPSstrParse, "$GPRMC", 6)){
-    	if(sscanf(GPSstrParse, "$GPRMC,%f,%f,%c,%f,%c,%f,%f,%d", &GPS.utc_time, &GPS.nmea_latitude, &GPS.ns, &GPS.nmea_longitude, &GPS.ew, &GPS.speed_k, &GPS.course_d, &GPS.date) >= 1)
-    		return;
-
-    }
-    else if (!strncmp(GPSstrParse, "$GPGLL", 6)){
-        if(sscanf(GPSstrParse, "$GPGLL,%f,%c,%f,%c,%f,%c", &GPS.nmea_latitude, &GPS.ns, &GPS.nmea_longitude, &GPS.ew, &GPS.utc_time, &GPS.gll_status) >= 1)
+    else if (!strncmp(&GPSstrParse[3], "RMC", 3)){
+        if(sscanf(GPSstrParse, "$%*2cRMC,%f,%f,%c,%f,%c,%f,%f,%d",
+                  &GPS.utc_time, &GPS.nmea_latitude, &GPS.ns,
+                  &GPS.nmea_longitude, &GPS.ew, &GPS.speed_k,
+                  &GPS.course_d, &GPS.date) >= 1)
             return;
     }
-    else if (!strncmp(GPSstrParse, "$GPVTG", 6)){
-        if(sscanf(GPSstrParse, "$GPVTG,%f,%c,%f,%c,%f,%c,%f,%c", &GPS.course_t, &GPS.course_t_unit, &GPS.course_m, &GPS.course_m_unit, &GPS.speed_k, &GPS.speed_k_unit, &GPS.speed_km, &GPS.speed_km_unit) >= 1)
+    else if (!strncmp(&GPSstrParse[3], "GLL", 3)){
+        if(sscanf(GPSstrParse, "$%*2cGLL,%f,%c,%f,%c,%f,%c",
+                  &GPS.nmea_latitude, &GPS.ns, &GPS.nmea_longitude,
+                  &GPS.ew, &GPS.utc_time, &GPS.gll_status) >= 1)
+            return;
+    }
+    else if (!strncmp(&GPSstrParse[3], "VTG", 3)){
+        if(sscanf(GPSstrParse, "$%*2cVTG,%f,%c,%f,%c,%f,%c,%f,%c",
+                  &GPS.course_t, &GPS.course_t_unit, &GPS.course_m,
+                  &GPS.course_m_unit, &GPS.speed_k, &GPS.speed_k_unit,
+                  &GPS.speed_km, &GPS.speed_km_unit) >= 1)
             return;
     }
 }

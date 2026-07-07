@@ -18,9 +18,12 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
 #include "can.h"
+#include "dma.h"
 #include "fatfs.h"
 #include "i2c.h"
+#include "iwdg.h"
 #include "rtc.h"
 #include "spi.h"
 #include "usart.h"
@@ -33,6 +36,8 @@
 #include "gps.h"
 #include "ringbuffer.h"
 #include "MPU9250.h"
+#include "VehicleState.h"
+#include "DisplayTransmit.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,7 +59,7 @@
 
 /* USER CODE BEGIN PV */
 
-// GPS Variables //
+// GPS //
 extern GPS_t GPS; 			// GPS Data
 uint8_t ubx_rate_5hz[] =    // Changing GPS Update Rate Protocol
 {
@@ -66,19 +71,13 @@ uint8_t ubx_rate_5hz[] =    // Changing GPS Update Rate Protocol
     0x01, 0x00,       		// timeRef (GPS Time)
     0xDE, 0x6A        		// Checksum (CK_A, CK_B)
 };
-
-// test data //
-uint8_t can1_tx_data[8] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
-uint8_t can2_tx_data[8] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x99, 0x00};
-
-int current_len = 0; // SDIO 용 데이터 길이 확인용
 int retry_count = 0;
 
 float GPS_prev_lat = 0;
 float GPS_prev_lon = 0;
 
-char sd_temp[512];
 
+// MPU //
 MPU9250_t myMPU;
 double gyro_bias[3] = {-0.9297, 2.2277, -1.0220};
 double mag_bias[3] = {11.4028, 12.5664, 11.3446};
@@ -87,10 +86,27 @@ double cal_mag[3];
 static uint32_t imu_prev_tick = 0;
 static uint32_t sd_prev_tick = 0;
 
+
+// FATFS & microSD //
+char sd_temp[512];
+int current_len = 0; // SDIO 용 데이터 길이 확인용
 __attribute__((aligned(4))) FATFS   fs;   // FATFS structure
 FIL     file; // File object structure
 FRESULT res;  // File function return code
 UINT    bytes_written; // The number of bytes actually written
+
+
+// RTC //
+RTC_DateTypeDef sDate;
+RTC_TimeTypeDef sTime;
+uint8_t current_Hours = 0;
+uint8_t current_Minutes = 0;
+uint8_t current_Seconds = 0;
+int current_SubSeconds = 0;
+
+// Display and States
+VehicleState VS;
+DisplayTransmit DISP;
 
 /* USER CODE END PV */
 
@@ -116,17 +132,21 @@ int _write(int file, char *ptr, int len) // printf UART 출력
     return len;
 }
 
+// SDIO //
 void SD_Init(void) {
 	// 1. SD card Mount
-	res = f_mount(&fs, "", 1);
+    int retry = 0;
+    do {
+        res = f_mount(&fs, "", 1);
+        if (res == FR_OK) break;
 
-	if (res == FR_OK) {
-		printf("SD Card Mount Complete.\n");
-	} else {
-		printf("SD Card Mount Fail! Error Code : %d\n", res);
-	}
+        printf("SD Mount Fail (%d), retry %d\n", res, retry);
+        f_mount(NULL, "", 0);   // 마운트 해제(정리)
+        HAL_Delay(200);         // 카드가 안정될 시간
+        retry++;
+    } while (retry < 5);
 
-	res = f_open(&file, "test.csv", FA_WRITE | FA_CREATE_ALWAYS);
+	res = f_open(&file, "data.csv", FA_WRITE | FA_OPEN_APPEND);
 	if (res == FR_OK) {
 		printf("SD Card File Open Complete. \n");
 	} else {
@@ -137,9 +157,9 @@ void SD_Init(void) {
 void SD_WriteFile(char *data, int len){
 	res = f_write(&file, data, len, &bytes_written);
 	if (res == FR_OK) {
-		printf("Write Complete!\n");
+		//printf("Write Complete!\n");
 	} else {
-		printf("Write Failed! Error Code : %d\n", res);
+		//printf("Write Failed! Error Code : %d\n", res);
 	}
 }
 
@@ -150,6 +170,12 @@ void SD_SaveFile(void){
 	} else {
 		printf("Sync Failed! Error Code : %d\n", res);
 	}
+}
+
+// RTC //
+void get_time(void){
+	HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BCD);
+	HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BCD);
 }
 
 /* USER CODE END 0 */
@@ -183,15 +209,20 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_CAN1_Init();
-  //MX_CAN2_Init();
   MX_RTC_Init();
   MX_FATFS_Init();
   MX_USART3_UART_Init();
   MX_I2C1_Init();
   MX_SPI2_Init();
+  MX_ADC1_Init();
+  MX_USART6_UART_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
+  HAL_Delay(250);
+
   printf("CAN Setup and Test...\n");
 
   CAN_Config();
@@ -208,6 +239,9 @@ int main(void)
 
   printf("MPU Starting...\n");
 
+  DisplayTransmit_Init(&DISP, &VS);
+
+  // 문제 없으면 지워버릴것. 아마도 점퍼선에 의한 문제인걸로 확인됨.
   retry_count = 0;
   while(MPU9250_Init(&myMPU, MPU9250_Device_0, ACCEL_SCALE_8G, GYRO_SCALE_2000dps, MAG_SCALE_16bit) != MPU9250_RESULT_OK)
   {
@@ -228,6 +262,10 @@ int main(void)
   }
   printf("MPU Success!\n");
 
+  get_time();
+  printf("\r\n20%02x-%02x-%02x %02x:%02x", sDate.Year, sDate.Month, sDate.Date,
+  												sTime.Hours, sTime.Minutes);
+
 
   /* USER CODE END 2 */
 
@@ -235,6 +273,13 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  HAL_IWDG_Refresh(&hiwdg);
+	  get_time();
+	  current_Hours = sTime.Hours;
+	  current_Minutes = sTime.Minutes;
+	  current_Seconds = sTime.Seconds;
+	  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+	  current_SubSeconds = (int)(subsec*1000);
 
 	  if(IsPopAvailable())
 	  {
@@ -244,7 +289,8 @@ int main(void)
 	          current_len = 0; // 현재까지 쓴 글자 수 (커서 위치)
 
 	          // 2. 시간 쓰기
-	          current_len += sprintf(sd_temp, "%lu", HAL_GetTick());
+	          current_len += sprintf(sd_temp, "%02x:%02x:%02x.%03x", current_Hours, current_Minutes,
+	        		  	  	  	  	  	  	  	  	  	  	  	  current_Seconds, current_SubSeconds);
 
 	          // 3. CAN ID 쓰기
 	          current_len += sprintf(sd_temp + current_len, ", %lx", received.RxHeader.StdId);
@@ -262,6 +308,7 @@ int main(void)
 
 	          // 7. SD 카드 저장
 	          SD_WriteFile(sd_temp, current_len);
+			  Classifier(&VS, received);
 	      }
 
 	  if(GPS.dec_latitude != GPS_prev_lat || GPS.dec_longitude != GPS_prev_lon)
@@ -270,7 +317,8 @@ int main(void)
 		  current_len = 0;
 
 		  // 2. 시간 쓰기
-		  current_len += sprintf(sd_temp, "%lu", HAL_GetTick());
+          current_len += sprintf(sd_temp, "%02x:%02x:%02x.%03x", current_Hours, current_Minutes,
+        		  	  	  	  	  	  	  	  	  	  	  	  current_Seconds, current_SubSeconds);
 
 		  // 3. GPS 인덱스 쓰기
 		  current_len += sprintf(sd_temp + current_len, ", GPS");
@@ -314,7 +362,8 @@ int main(void)
 		  current_len = 0;
 
 		  // 2. 시간 쓰기
-		  current_len += sprintf(sd_temp, "%lu", HAL_GetTick());
+          current_len += sprintf(sd_temp, "%02x:%02x:%02x.%03x", current_Hours, current_Minutes,
+        		  	  	  	  	  	  	  	  	  	  	  	  current_Seconds, current_SubSeconds);
 
 		  // 3. IMU 인덱스 쓰기
 		  current_len += sprintf(sd_temp + current_len, ", IMU");
@@ -330,20 +379,23 @@ int main(void)
 		  current_len += sprintf(sd_temp + current_len, "\n");
 
 		  // 6. 화면 출력
-		  printf("IMU : %s", sd_temp);
+		  //printf("IMU : %s", sd_temp);
 
 		  // 7. SD 카드 저장
 		  SD_WriteFile(sd_temp, current_len);
+		  VehicleState_set_lat_g(&VS,  (uint16_t)(myMPU.acc[0] * 10.0f + 30.0f));
+		  VehicleState_set_long_g(&VS, (uint16_t)(myMPU.acc[1] * 10.0f + 30.0f));
 	  }
 
 	  if (HAL_GetTick() - sd_prev_tick >= 1000)
 	  {
 		  SD_SaveFile();
 		  sd_prev_tick = HAL_GetTick();
+
 	  }
 
-
-
+	  DisplayTransmit_Transmit(&DISP);
+	  HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -368,8 +420,9 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
-  RCC_OscInitStruct.LSEState = RCC_LSE_OFF;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI
+                              |RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
@@ -409,18 +462,6 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 /* CallBack Function */
-// Ring Buffer Test /
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-	if(GPIO_Pin == B1_Pin) {
-		if(IsWriteAvailable()){
-			CAN_Send(&hcan1, MotoRx, can1_tx_data, 8);
-			CAN_Send(&hcan1, MotoRx, can2_tx_data, 8);
-		} else {
-			printf("Ring buffer is full!\n");
-		}
-	}
-}
 
 // GPS Call Back (USART3) //
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
@@ -438,16 +479,6 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-  //__disable_irq();
-
-  if(hi2c1.ErrorCode != 0){
-	  printf("MPU Error Reported : %lx\n", hi2c1.ErrorCode);
-  }
-  printf("System Rebooting in 1 second...\n");
-  HAL_Delay(1000); // 1초 대기 (이때 UART 송신 완료 대기)
-
-  // MCU 하드웨어 리셋 (처음 전원 넣은 것과 똑같이 main의 맨 처음부터 다시 시작)
-  NVIC_SystemReset();
   while (1)
   {
   }

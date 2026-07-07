@@ -12,7 +12,7 @@
 ../Core/Src/fatfs_sd.c:172:13:SD_TxDataBlock	24	static
 ../Core/Src/fatfs_sd.c:214:13:SD_SendCmd	24	static
 ../Core/Src/fatfs_sd.c:253:9:SD_disk_initialize	32	static
-../Core/Src/fatfs_sd.c:353:9:SD_disk_status	16	static
-../Core/Src/fatfs_sd.c:360:9:SD_disk_read	24	static
-../Core/Src/fatfs_sd.c:402:9:SD_disk_write	24	static
-../Core/Src/fatfs_sd.c:457:9:SD_disk_ioctl	56	static
+../Core/Src/fatfs_sd.c:364:9:SD_disk_status	16	static
+../Core/Src/fatfs_sd.c:371:9:SD_disk_read	24	static
+../Core/Src/fatfs_sd.c:413:9:SD_disk_write	24	static
+../Core/Src/fatfs_sd.c:468:9:SD_disk_ioctl	56	static

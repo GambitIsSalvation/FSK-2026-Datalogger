@@ -1,0 +1,4 @@
+../Core/Src/Laptime.c:16:6:lap_setup	8	static
+../Core/Src/Laptime.c:21:6:lap_end	8	static
+../Core/Src/Laptime.c:28:10:get_lap	4	static
+../Core/Src/Laptime.c:33:10:get_laptime	4	static

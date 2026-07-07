@@ -34,11 +34,22 @@ extern "C" {
 
 extern CAN_HandleTypeDef hcan1;
 
-extern CAN_HandleTypeDef hcan2;
-
 /* USER CODE BEGIN Private defines */
-#define MotoRx 0x181 // 모터 컨트롤러 수신 ID
-#define MotoTx 0x201 // 모터 컨트롤러 송신 ID
+// CAN ID
+#define MOTORX  0x181 // 모터 컨트롤러 수신 ID
+#define MOTOTX  0x201 // 모터 컨트롤러 송신 ID
+#define BMSRX_1 0x6b0 // BMS 수신 ID_1
+#define BMSRX_2 0x6b1 // BMS Error 수신 ID
+
+// 모터 컨트롤러 REGID
+#define RPM_COMMAND 0x32 // 타겟 RPM
+#define RPM_ACTUAL  0x30 // 현재 RPM
+#define IQ_COMMAND  0x22 // 타겟 유효전류
+#define IQ_ACTUAL   0x27 // 현재 유효전류
+#define V_OUT       0x8A // 인버터 -> 모터 전압
+#define V_IN        0x66 // 배터리 -> 인버터 전압
+#define T_CTRL      0x4A // 컨트롤러 온도
+#define T_MOTOR     0x49 // 모터 온도
 
 typedef struct {
 	CAN_RxHeaderTypeDef RxHeader;
@@ -48,7 +59,6 @@ typedef struct {
 /* USER CODE END Private defines */
 
 void MX_CAN1_Init(void);
-void MX_CAN2_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 
