@@ -4,6 +4,20 @@
 
 #include "VehicleState.h"
 
+static const TempPoint temp_igbt[] = {
+    {16245, -35}, {16308, -30}, {16387, -25}, {16487, -20},
+    {16609, -15}, {16759, -10}, {16938, -5},  {17151, 0},
+    {17400, 5},   {17688, 10},  {18017, 15},  {18387, 20},
+    {18797, 25},  {19247, 30},  {19733, 35},  {20250, 40},
+    {20793, 45},  {21357, 50},  {21933, 55},  {22515, 60},
+    {23097, 65},  {23671, 70},  {24232, 75},  {24775, 80},
+    {25296, 85},  {25792, 90},  {26261, 95},  {26702, 100},
+    {27114, 105}, {27497, 110}, {27851, 115}, {28179, 120},
+    {28480, 125}, {28757, 130}, {29011, 135}, {29243, 140},
+    {29456, 145}, {29650, 150}, {29827, 155}
+};
+
+
 void VehicleState_Init(VehicleState* self)
 {
     self->rpm = 0;
@@ -54,4 +68,25 @@ uint16_t VehicleState_get_hcv(const VehicleState* self)       { return self->hcv
 uint16_t VehicleState_get_lat_g(const VehicleState* self)     { return self->lat_g; }
 uint16_t VehicleState_get_long_g(const VehicleState* self)    { return self->long_g; }
 uint16_t VehicleState_get_laps(const VehicleState* self)      { return self->laps; }
-uint16_t VehicleState_get_lap_time(const VehicleState* self)  { return self->lap_time; }
+uint32_t VehicleState_get_lap_time(const VehicleState* self)  { return self->lap_time; }
+
+
+// motor temp process
+int16_t igbt_raw_to_temp_x10(uint16_t raw) {
+    if (raw <= temp_igbt[0].raw)
+        return temp_igbt[0].temp * 10;
+    if (raw >= temp_igbt[38].raw)
+        return temp_igbt[38].temp * 10;
+
+    for (int i = 0; i < 38; i++) {
+        if (raw <= temp_igbt[i+1].raw) {
+            int32_t temp_diff = (temp_igbt[i+1].temp - temp_igbt[i].temp) * 10;
+            int32_t raw_span  = temp_igbt[i+1].raw - temp_igbt[i].raw;
+            int32_t raw_offset = raw - temp_igbt[i].raw;
+            int32_t result = temp_igbt[i].temp * 10
+                           + (raw_offset * temp_diff) / raw_span;
+            return (int16_t)result;
+        }
+    }
+    return temp_igbt[38].temp * 10;
+}

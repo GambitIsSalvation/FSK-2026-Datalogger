@@ -43,9 +43,10 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Middlewares/Third_Party/FatFs/src/ff.h ../FATFS/Target/user_diskio.h \
  ../Core/Inc/i2c.h ../Core/Inc/iwdg.h ../Core/Inc/rtc.h ../Core/Inc/spi.h \
  ../Core/Inc/usart.h ../Core/Inc/gpio.h ../Core/Inc/gps.h \
- ../Core/Inc/ringbuffer.h ../Core/Inc/can.h ../Core/Inc/MPU9250.h \
- ../Core/Inc/VehicleState.h ../Core/Inc/DisplayTransmit.h \
- ../Core/Inc/VehicleState.h
+ ../Core/Inc/ringbuffer.h ../Core/Inc/can.h ../Core/Inc/VehicleState.h \
+ ../Core/Inc/MPU9250.h ../Core/Inc/VehicleState.h \
+ ../Core/Inc/DisplayTransmit.h ../Core/Inc/CrossDetect.h \
+ ../Core/Inc/APPS.h
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
 ../Core/Inc/stm32f4xx_hal_conf.h:
@@ -104,7 +105,9 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Core/Inc/gps.h:
 ../Core/Inc/ringbuffer.h:
 ../Core/Inc/can.h:
+../Core/Inc/VehicleState.h:
 ../Core/Inc/MPU9250.h:
 ../Core/Inc/VehicleState.h:
 ../Core/Inc/DisplayTransmit.h:
-../Core/Inc/VehicleState.h:
+../Core/Inc/CrossDetect.h:
+../Core/Inc/APPS.h:

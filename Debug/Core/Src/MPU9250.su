@@ -10,3 +10,4 @@
 ../Core/Src/MPU9250.c:297:19:readMultiBytes	32	static
 ../Core/Src/MPU9250.c:315:18:isMPU9250Ready	16	static
 ../Core/Src/MPU9250.c:324:21:deg2rad	16	static
+../Core/Src/MPU9250.c:329:6:MPU_Init	24	static

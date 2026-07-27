@@ -325,3 +325,11 @@ static inline float deg2rad(float x)
 {
 	return ((PI / 180.0f) * x);
 }
+
+void MPU_Init(MPU9250_t *MPU9250)
+{
+	if(MPU9250_Init(MPU9250, MPU9250_Device_0, ACCEL_SCALE_8G, GYRO_SCALE_2000dps, MAG_SCALE_16bit) != MPU9250_RESULT_OK)
+	{
+		init_status |= (1 << 3);
+	}
+}

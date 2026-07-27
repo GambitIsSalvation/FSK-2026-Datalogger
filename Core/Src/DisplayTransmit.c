@@ -4,6 +4,7 @@
 #include "main.h"
 
 extern UART_HandleTypeDef huart6;
+volatile uint8_t disp_dma_ready = 1;
 
 void DisplayTransmit_Init(DisplayTransmit* self, VehicleState* vs)
 {
@@ -65,10 +66,12 @@ void DisplayTransmit_Packing(DisplayTransmit* self)
     buf[21] = (uint8_t)(temp);
 
     temp = VehicleState_get_lap_time(self->VS);
-    buf[22] = (uint8_t)(temp >> 8);
-    buf[23] = (uint8_t)(temp);
+    buf[22] = (uint8_t)(temp >> 24);
+    buf[23] = (uint8_t)(temp >> 16);
+    buf[24] = (uint8_t)(temp >> 8);
+    buf[25] = (uint8_t)(temp);
 
-    // buf[24], buf[25] 체크섬 추가 예정
+    // buf[26], buf[27] 체크섬 추가 예정
 }
 
 void ErrorPacking(DisplayTransmit* self){
@@ -91,14 +94,17 @@ void ErrorPacking(DisplayTransmit* self){
 
 void DisplayTransmit_Transmit(DisplayTransmit* self)
 {
-    DisplayTransmit_Packing(self);
-    HAL_UART_Transmit_DMA(&huart6, self->tx_buffer, sizeof(self->tx_buffer));
-    if(self->VS->bms_error != 0){
-    	uint32_t timeout = HAL_GetTick();
-    	while(huart6.gState != HAL_UART_STATE_READY){
-    		if(HAL_GetTick() - timeout > 5) break;
-    	}
-    	ErrorPacking(self);
-    	HAL_UART_Transmit_DMA(&huart6, self->tx_buffer, sizeof(self->tx_buffer));
-    }
+	if (disp_dma_ready) {
+		disp_dma_ready = 0;
+		DisplayTransmit_Packing(self);
+		HAL_UART_Transmit_DMA(&huart6, self->tx_buffer, sizeof(self->tx_buffer));
+		if(self->VS->bms_error != 0){
+			uint32_t timeout = HAL_GetTick();
+			while(huart6.gState != HAL_UART_STATE_READY){
+				if(HAL_GetTick() - timeout > 5) break;
+			}
+			ErrorPacking(self);
+			HAL_UART_Transmit_DMA(&huart6, self->tx_buffer, sizeof(self->tx_buffer));
+		}
+	}
 }

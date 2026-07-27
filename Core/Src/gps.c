@@ -1,4 +1,4 @@
-/*
+ /*
  * gps.c
  *
  *  Created on: Nov 15, 2019
@@ -34,6 +34,7 @@
 #include <string.h>
 #include <usart.h>
 #include "gps.h"
+#include "main.h"
 
 #if (GPS_DEBUG == 1)
 #include <usbd_cdc_if.h>
@@ -42,6 +43,38 @@
 uint8_t rx_data = 0;
 uint8_t rx_buffer[GPSBUFSIZE];
 uint8_t rx_index = 0;
+
+uint8_t ubx_rate_5hz[] =    // Changing GPS Update Rate Protocol
+{
+    0xB5, 0x62,       		// Header
+    0x06, 0x08,       		// Class(CFG), ID(RATE)
+    0x06, 0x00,       		// Length (6 bytes)
+    0xC8, 0x00,       		// measRate (200ms = 5Hz) (Little Endian)
+    0x01, 0x00,       		// navRate (1 cycle)
+    0x01, 0x00,       		// timeRef (GPS Time)
+    0xDE, 0x6A        		// Checksum (CK_A, CK_B)
+};
+
+uint8_t ubx_rate_10hz[] =    // Changing GPS Update Rate Protocol
+{
+    0xB5, 0x62,       		// Header
+    0x06, 0x08,       		// Class(CFG), ID(RATE)
+    0x06, 0x00,       		// Length (6 bytes)
+    0x64, 0x00,       		// measRate (200ms = 5Hz) (Little Endian)
+    0x01, 0x00,       		// navRate (1 cycle)
+    0x01, 0x00,       		// timeRef (GPS Time)
+    0x7A, 0x12        		// Checksum (CK_A, CK_B)
+};
+
+uint8_t ubx_baudrate_115200[] =
+{
+		0xB5, 0x62, 0x06, 0x00, 0x14, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0xD0, 0x08,
+		0x00, 0x00, 0x00, 0xC2, 0x01, 0x00,
+		0x07, 0x00, 0x03, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xC0, 0x7E
+};
+
 
 GPS_t GPS;
 
@@ -55,7 +88,20 @@ void GPS_print(char *data){
 
 void GPS_Init()
 {
-	HAL_UART_Receive_IT(GPS_USART, &rx_data, 1);
+	//HAL_UART_Transmit(&huart3, ubx_rate_5hz, sizeof(ubx_rate_5hz), 100);
+
+	if(HAL_UART_Transmit(&huart3, ubx_baudrate_115200, sizeof(ubx_baudrate_115200), 100) == HAL_OK) {
+		HAL_Delay(100);
+		HAL_UART_DeInit(&huart3);
+		huart3.Init.BaudRate = 115200;
+		if(HAL_UART_Init(&huart3) != HAL_OK) {
+			init_status |= (1 << 2);
+		}
+	}
+	if(HAL_UART_Transmit(&huart3, ubx_rate_10hz, sizeof(ubx_rate_10hz), 100) != HAL_OK) {
+		init_status |= (1 << 2);
+	}
+	if(HAL_UART_Receive_IT(GPS_USART, &rx_data, 1) != HAL_OK) { init_status |= (1 << 2); }
 }
 
 
@@ -160,4 +206,11 @@ float GPS_nmea_to_dec(float deg_coord, char nsew) {
         decimal *= -1;
     }
     return decimal;
+}
+
+void print_rxdata(void) {
+	for (int i = 0; i < GPSBUFSIZE; i++){
+		printf("%c", rx_buffer[i]);
+	}
+	printf("\n");
 }

@@ -41,7 +41,7 @@ extern "C" {
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
-
+extern uint8_t init_status;
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
@@ -84,6 +84,9 @@ void Error_Handler(void);
 #define DISPLAY_TX_GPIO_Port GPIOC
 #define DISPLAY_RX_Pin GPIO_PIN_7
 #define DISPLAY_RX_GPIO_Port GPIOC
+#define GPS_PPS_Pin GPIO_PIN_8
+#define GPS_PPS_GPIO_Port GPIOC
+#define GPS_PPS_EXTI_IRQn EXTI9_5_IRQn
 #define SD_CS_Pin GPIO_PIN_8
 #define SD_CS_GPIO_Port GPIOA
 #define SD_SCK_Pin GPIO_PIN_9

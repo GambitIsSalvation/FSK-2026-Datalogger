@@ -221,6 +221,7 @@ HAL_StatusTypeDef readByte(I2C_HandleTypeDef *hi2c, uint8_t device_addr, uint8_t
 HAL_StatusTypeDef writeMultiBytes(I2C_HandleTypeDef *hi2c, uint8_t device_addr, uint8_t register_addr, uint8_t *data, uint16_t count);
 HAL_StatusTypeDef readMultiBytes(I2C_HandleTypeDef *hi2c, uint8_t device_addr, uint8_t register_addr, uint8_t *data, uint16_t count);
 
+void MPU_Init(MPU9250_t *MPU9250);
 
 
 #ifdef __cplusplus

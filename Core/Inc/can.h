@@ -38,8 +38,8 @@ extern CAN_HandleTypeDef hcan1;
 // CAN ID
 #define MOTORX  0x181 // 모터 컨트롤러 수신 ID
 #define MOTOTX  0x201 // 모터 컨트롤러 송신 ID
-#define BMSRX_1 0x6b0 // BMS 수신 ID_1
-#define BMSRX_2 0x6b1 // BMS Error 수신 ID
+#define BMSRX_1 0x6b1 // BMS 수신 ID_1
+#define BMSRX_2 0x6b0 // BMS Error 수신 ID
 
 // 모터 컨트롤러 REGID
 #define RPM_COMMAND 0x32 // 타겟 RPM

@@ -43,7 +43,7 @@ typedef struct {
     uint16_t lat_g;
     uint16_t long_g;
     uint16_t laps;
-    uint16_t lap_time;
+    uint32_t lap_time;
     /************* 데이터 로깅용 ***************/
     //BMS
     uint16_t lcv; // Lowest Cell Voltage
@@ -52,15 +52,21 @@ typedef struct {
     uint16_t voltage; // Pack Voltage
     uint32_t bms_error; // Error Fault
 
+    /*
     //Motor
     int16_t rpm_command; // target rpm
     int16_t iq_command;  // target effective current
     int16_t iq_actual;   // actual effective current
     uint16_t inv_vout;    // inverter to motor voltage
     uint16_t inv_vin;     // battery to inverter voltage
-
+    */
 
 } VehicleState;
+
+typedef struct {
+    uint16_t raw;   // 받는 값 [n]
+    int16_t  temp;  // 온도 [°C]
+} TempPoint;
 
 void VehicleState_Init(VehicleState* self);
 
@@ -88,8 +94,9 @@ uint16_t VehicleState_get_hcv(const VehicleState* self);
 uint16_t VehicleState_get_lat_g(const VehicleState* self);
 uint16_t VehicleState_get_long_g(const VehicleState* self);
 uint16_t VehicleState_get_laps(const VehicleState* self);
-uint16_t VehicleState_get_lap_time(const VehicleState* self);
+uint32_t VehicleState_get_lap_time(const VehicleState* self);
 
+int16_t igbt_raw_to_temp_x10(uint16_t raw);
 #ifdef __cplusplus
 }
 #endif

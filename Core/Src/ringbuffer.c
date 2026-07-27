@@ -66,16 +66,28 @@ void Classifier(VehicleState* VS, RxMessage received)
 	case MOTORX:
 		switch(received.RxData[0])
 		{
-		case RPM_COMMAND:
-			raw = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
-			VS->rpm_command = ((int32_t)raw * NMAX) / 32767;
-			//VS->rpm_command = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
-			break;
-
 		case RPM_ACTUAL:
 			raw = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
 			VS->rpm = ((int32_t)raw * NMAX) / 32767;
 			//VS->rpm = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
+			break;
+
+		case T_CTRL:
+			raw = (received.RxData[2] << 8) | received.RxData[1];
+			VS->ctrl_temp = igbt_raw_to_temp_x10(raw);
+			break;
+
+		case T_MOTOR:
+			VS->mtr_temp  = ((received.RxData[2] << 8) | received.RxData[1])*10;
+			break;
+		}
+		break;
+
+		/*
+		case RPM_COMMAND:
+			raw = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
+			VS->rpm_command = ((int32_t)raw * NMAX) / 32767;
+			//VS->rpm_command = (int16_t)((received.RxData[2] << 8) | received.RxData[1]);
 			break;
 
 		case IQ_COMMAND:
@@ -93,26 +105,16 @@ void Classifier(VehicleState* VS, RxMessage received)
 		case V_IN:
 			VS->inv_vin = (received.RxData[2] << 8) | received.RxData[1];
 			break;
-
-		case T_CTRL:
-			VS->ctrl_temp = (received.RxData[2] << 8) | received.RxData[1];
-			break;
-
-		case T_MOTOR:
-			VS->mtr_temp = (received.RxData[2] << 8) | received.RxData[1];
-			break;
-		}
-		break;
+		*/
 
 	// BMS Loging Data
 	case BMSRX_1:
-		VS->hcv = received.RxData[0];
-		VS->lcv = received.RxData[1];
-		VS->htp = received.RxData[2];
-		VS->ltp = received.RxData[3];
-		VS->soc = received.RxData[4];
-		VS->current = received.RxData[5];
-		VS->voltage = received.RxData[6];
+		uint8_t hcv_1 = received.RxData[0];
+		uint8_t hcv_2 = received.RxData[1];
+		uint16_t hcv_raw = ((uint16_t)hcv_1 << 8) | hcv_2;
+		VS->hcv = hcv_raw / 100;
+		VS->htp = received.RxData[2] * 10;
+		VS->soc = (uint16_t)(received.RxData[3] * 50);
 		break;
 
 	case BMSRX_2:

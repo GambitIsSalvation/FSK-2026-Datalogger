@@ -33,6 +33,8 @@ uint8_t RxData[8]; // 수신 데이터 메모리 할당
 RxMessage RxMsg; // 모터 컨트롤러 메세지 구조체 정의
 
 uint32_t TxMailbox; // 송신 메일박스 메모리 할당
+
+uint32_t overflow_count = 0;
 /* USER CODE END 0 */
 
 CAN_HandleTypeDef hcan1;
@@ -152,21 +154,18 @@ void CAN_Config(void) // CAN 필터 설정
 
     if (HAL_CAN_ConfigFilter(&hcan1, &MotoFilter) != HAL_OK)
     {
-    	printf("Motor Controller filter setup failed!\n");
+    	init_status |= (1 << 0);
     }
 
     if(HAL_CAN_Start(&hcan1) != HAL_OK )
     {
-    	printf("CAN1 start failed! Error Code : %d\n", hcan1.ErrorCode);
-    	Error_Handler();
+    	init_status |= (1 << 0);
     }
 
     if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
     {
-        printf("CAN1 Interrupt enable failed!");
+    	init_status |= (1 << 0);
     }
-
-    //..
 }
 
 void CAN_Send(CAN_HandleTypeDef *hcan, uint32_t id, uint8_t *data, uint8_t length) // CAN 데이터 프레임 송신
@@ -186,22 +185,26 @@ void CAN_Send(CAN_HandleTypeDef *hcan, uint32_t id, uint8_t *data, uint8_t lengt
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) // CAN Rx 인터럽트 콜백 함수
 {
-	if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
-	{
-		if (hcan == &hcan1)
+	while (HAL_CAN_GetRxFifoFillLevel(hcan, CAN_RX_FIFO0) > 0) {
+		if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
 		{
-			if(IsWriteAvailable()){                                 // Push가 가능한 경우
-				RxMsg.RxHeader = RxHeader;                          // 헤더 패키징
-				memcpy(RxMsg.RxData, RxData, RxHeader.DLC);         // 데이터 패키징
-				RingPush(RxMsg);                                    // 링버퍼에 Push
-			}
+			if (hcan == &hcan1)
+			{
+				if(IsWriteAvailable()){                                 // Push가 가능한 경우
+					RxMsg.RxHeader = RxHeader;                          // 헤더 패키징
+					memcpy(RxMsg.RxData, RxData, RxHeader.DLC);         // 데이터 패키징
+					RingPush(RxMsg);                                    // 링버퍼에 Push
+				} else {
+					overflow_count ++;
+				}
 			// 생각해야 할 부분이 여기서는 이미 FIFO에서 패킷을 풀어둔 상태라
 			// 링 버퍼가 가득 찼을때 데이터가 완전 소실될 가능성이 있음
+			}
 		}
-	}
-	else
-	{
-		printf("Fail to Receive CAN Messages!\n");
+		else
+		{
+			//printf("Fail to Receive CAN Messages!\n");
+		}
 	}
 }
 /* USER CODE END 1 */

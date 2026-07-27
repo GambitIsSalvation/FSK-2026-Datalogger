@@ -10,3 +10,4 @@
 ../Core/Src/MPU9250.c:297:19:readMultiBytes	3
 ../Core/Src/MPU9250.c:315:18:isMPU9250Ready	2
 ../Core/Src/MPU9250.c:324:21:deg2rad	1
+../Core/Src/MPU9250.c:329:6:MPU_Init	2

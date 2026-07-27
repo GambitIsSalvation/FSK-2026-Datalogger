@@ -38,6 +38,8 @@
 #include "MPU9250.h"
 #include "VehicleState.h"
 #include "DisplayTransmit.h"
+#include "CrossDetect.h"
+#include "APPS.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -61,16 +63,7 @@
 
 // GPS //
 extern GPS_t GPS; 			// GPS Data
-uint8_t ubx_rate_5hz[] =    // Changing GPS Update Rate Protocol
-{
-    0xB5, 0x62,       		// Header
-    0x06, 0x08,       		// Class(CFG), ID(RATE)
-    0x06, 0x00,       		// Length (6 bytes)
-    0xC8, 0x00,       		// measRate (200ms = 5Hz) (Little Endian)
-    0x01, 0x00,       		// navRate (1 cycle)
-    0x01, 0x00,       		// timeRef (GPS Time)
-    0xDE, 0x6A        		// Checksum (CK_A, CK_B)
-};
+
 int retry_count = 0;
 
 float GPS_prev_lat = 0;
@@ -79,35 +72,53 @@ float GPS_prev_lon = 0;
 
 // MPU //
 MPU9250_t myMPU;
-double gyro_bias[3] = {-0.9297, 2.2277, -1.0220};
-double mag_bias[3] = {11.4028, 12.5664, 11.3446};
+double gyro_bias[3] = {0, 0, 0};
+double mag_bias[3] = {0, 0, 0};
 double cal_gyro[3];
 double cal_mag[3];
 static uint32_t imu_prev_tick = 0;
+static uint32_t mag_prev_tick = 0;
 static uint32_t sd_prev_tick = 0;
+static uint32_t sync_prev_tick = 0;
+volatile uint8_t sync_pending = 0;
 
 
 // FATFS & microSD //
-char sd_temp[512];
-int current_len = 0; // SDIO 용 데이터 길이 확인용
+char sd_temp[2048];
+uint16_t current_len = 0; // SDIO 용 데이터 길이 확인용
+uint16_t remain = 0;
+uint8_t can_count = 0;
+
 __attribute__((aligned(4))) FATFS   fs;   // FATFS structure
 FIL     file; // File object structure
 FRESULT res;  // File function return code
 UINT    bytes_written; // The number of bytes actually written
-
-
-// RTC //
-RTC_DateTypeDef sDate;
-RTC_TimeTypeDef sTime;
-uint8_t current_Hours = 0;
-uint8_t current_Minutes = 0;
-uint8_t current_Seconds = 0;
-int current_SubSeconds = 0;
+uint32_t sync_count = 0;
 
 // Display and States
 VehicleState VS;
 DisplayTransmit DISP;
+extern uint8_t disp_dma_ready;
+extern uint8_t laps;
+extern uint32_t lap_time;
+extern uint32_t pre_tick;
 
+// RTC
+RTC_DateTypeDef sDate;
+RTC_TimeTypeDef sTime;
+
+volatile uint8_t current_Hours = 0;
+volatile uint8_t current_Minutes = 0;
+volatile uint8_t current_Seconds = 0;
+volatile int current_SubSeconds = 0;
+
+uint16_t sync_error = 0;
+
+uint32_t UTC_temp  = 0;
+volatile uint8_t UTC_flag = 0;
+
+// Module Status
+uint8_t init_status = 0; // 0:CAN  1:SD  2:GPS  3:IMU 4: UTC
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -120,7 +131,7 @@ void SD_WriteFile(char *data, int len);
 void SD_SaveFile(void);
 
 // UART 통신 기본 PFP //
-int _write(int file, char *ptr, int len);                                                   // printf UART 출력
+int _write(int file, char *ptr, int len);   // printf UART 출력
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -135,22 +146,14 @@ int _write(int file, char *ptr, int len) // printf UART 출력
 // SDIO //
 void SD_Init(void) {
 	// 1. SD card Mount
-    int retry = 0;
-    do {
-        res = f_mount(&fs, "", 1);
-        if (res == FR_OK) break;
-
-        printf("SD Mount Fail (%d), retry %d\n", res, retry);
-        f_mount(NULL, "", 0);   // 마운트 해제(정리)
-        HAL_Delay(200);         // 카드가 안정될 시간
-        retry++;
-    } while (retry < 5);
+	res = f_mount(&fs, "", 1);
+	if (res != FR_OK) {
+		init_status |= (1 << 1);
+	}
 
 	res = f_open(&file, "data.csv", FA_WRITE | FA_OPEN_APPEND);
-	if (res == FR_OK) {
-		printf("SD Card File Open Complete. \n");
-	} else {
-		printf("SD Card File Open Fail! Error Code : %d\n", res);
+	if (res != FR_OK) {
+		init_status |= (1 << 1);
 	}
 }
 
@@ -166,18 +169,32 @@ void SD_WriteFile(char *data, int len){
 void SD_SaveFile(void){
 	res = f_sync(&file);
 	if (res == FR_OK) {
-		printf("Sync Complete!\n");
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+		//printf("Sync Complete!\n");
 	} else {
-		printf("Sync Failed! Error Code : %d\n", res);
+		//printf("Sync Failed! Error Code : %d\n", res);
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+		Error_Handler();
 	}
 }
 
 // RTC //
-void get_time(void){
+void get_time(void)
+{
 	HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BCD);
 	HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BCD);
 }
 
+void CAN_Send_Blocking(CAN_HandleTypeDef *hcan, uint32_t id, uint8_t *data, uint8_t len)
+{
+	HAL_Delay(10);
+    uint32_t timeout = HAL_GetTick();
+    // 빈 메일박스가 생길 때까지 대기
+    while (HAL_CAN_GetTxMailboxesFreeLevel(hcan) == 0) {
+        if (HAL_GetTick() - timeout > 10) return;   // 10ms 타임아웃
+    }
+    CAN_Send(hcan, id, data, len);
+}
 /* USER CODE END 0 */
 
 /**
@@ -223,50 +240,48 @@ int main(void)
   /* USER CODE BEGIN 2 */
   HAL_Delay(250);
 
-  printf("CAN Setup and Test...\n");
-
+  // CAN Init
   CAN_Config();
 
-  printf("SDIO Setup...\n");
-
+  // SD Init
   SD_Init();
 
-  printf("GPS Setup...\n");
-
-  HAL_UART_Transmit(&huart3, ubx_rate_5hz, sizeof(ubx_rate_5hz), 100);
-
+  // GPS Init
   GPS_Init();
 
-  printf("MPU Starting...\n");
+  // MPU Init
+  MPU_Init(&myMPU);
+
+  // Logging Start
+  get_time();
+  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+
+  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
+		  "%02x:%02x:%02x.%03d, SYSTEM, CONFIG ON, %d\n",
+		  sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000), init_status);
 
   DisplayTransmit_Init(&DISP, &VS);
 
-  // 문제 없으면 지워버릴것. 아마도 점퍼선에 의한 문제인걸로 확인됨.
-  retry_count = 0;
-  while(MPU9250_Init(&myMPU, MPU9250_Device_0, ACCEL_SCALE_8G, GYRO_SCALE_2000dps, MAG_SCALE_16bit) != MPU9250_RESULT_OK)
-  {
-	  printf("MPU Setup Failed!... Retry count = %d\n", retry_count);
 
-	  HAL_I2C_DeInit(&hi2c1);
-
-	  HAL_Delay(100);
-
-	  HAL_I2C_Init(&hi2c1);
-
-	  retry_count ++;
-
-	  if(retry_count >= 5) {
-		  printf("MPU is Dead...\n");
-		  Error_Handler();
-	  }
-  }
-  printf("MPU Success!\n");
-
-  get_time();
-  printf("\r\n20%02x-%02x-%02x %02x:%02x", sDate.Year, sDate.Month, sDate.Date,
-  												sTime.Hours, sTime.Minutes);
-
-
+  //모컨 통신속도 제어
+  /*
+  uint8_t dat0[3] ={0x3D, 0x32, 0x0A};
+  uint8_t dat1[3] ={0x3D, 0x30, 0x0A};
+  uint8_t dat2[3] ={0x3D, 0x22, 0x64};
+  uint8_t dat3[3] ={0x3D, 0x27, 0x64};
+  uint8_t dat4[3] ={0x3D, 0x8A, 0x64};
+  uint8_t dat5[3] ={0x3D, 0x66, 0x64};
+  uint8_t dat6[3] ={0x3D, 0x49, 0x64};
+  uint8_t dat7[3] ={0x3D, 0x4A, 0x64};
+  CAN_Send_Blocking(&hcan1, MOTOTX, dat0, 3);
+  CAN_Send_Blocking(&hcan1, MOTOTX, dat1, 3);
+  CAN_Send_Blocking(&hcan1, MOTOTX, dat2, 3);
+  CAN_Send_Blocking(&hcan1, MOTOTX, dat3, 3);
+  CAN_Send_Blocking(&hcan1, MOTOTX, dat4, 3);
+  CAN_Send_Blocking(&hcan1, MOTOTX, dat5, 3);
+  CAN_Send_Blocking(&hcan1, MOTOTX, dat6, 3);
+  CAN_Send_Blocking(&hcan1, MOTOTX, dat7, 3);
+  */
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -274,128 +289,165 @@ int main(void)
   while (1)
   {
 	  HAL_IWDG_Refresh(&hiwdg);
-	  get_time();
-	  current_Hours = sTime.Hours;
-	  current_Minutes = sTime.Minutes;
-	  current_Seconds = sTime.Seconds;
-	  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
-	  current_SubSeconds = (int)(subsec*1000);
 
-	  if(IsPopAvailable())
+	  // UTC - RTC 동기화
+	  if(UTC_flag) {
+		  UTC_temp = GPS.utc_time;
+		  sTime.Hours = RTC_ByteToBcd2(UTC_temp / 10000 + 9);
+		  sTime.Minutes = RTC_ByteToBcd2((UTC_temp / 100) % 100);
+		  sTime.Seconds = RTC_ByteToBcd2(UTC_temp % 100 + 1);
+		  sTime.SubSeconds = 0;
+		  if(HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD) == HAL_OK) { UTC_flag = 0; }
+		  if(!init_status) {
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
+					  "%02x:%02x:%02x.%03d, SYSTEM, RTC-UTC SYNC\n",
+					  sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+			  init_status |= 1<<4;
+		  }
+	  }
+
+	  // CAN Messages
+	  can_count = 0;
+	  while(IsPopAvailable() && can_count < 32)
 	  {
+		  	  get_time();
+		  	  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
 	          RxMessage received = RingPop();
+		  	  Classifier(&VS, received);
 
-	          // 1. 변수 초기화
-	          current_len = 0; // 현재까지 쓴 글자 수 (커서 위치)
+		  	  remain = sizeof(sd_temp) - current_len;
+		  	  if (remain < 128) break;
 
-	          // 2. 시간 쓰기
-	          current_len += sprintf(sd_temp, "%02x:%02x:%02x.%03x", current_Hours, current_Minutes,
-	        		  	  	  	  	  	  	  	  	  	  	  	  current_Seconds, current_SubSeconds);
+		  	  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
 
-	          // 3. CAN ID 쓰기
-	          current_len += sprintf(sd_temp + current_len, ", %lx", received.RxHeader.StdId);
-
-	          // 4. 데이터 반복문
+	          current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ", %lx", received.RxHeader.StdId);
 	          for(int i = 0; i < received.RxHeader.DLC; i++) {
-	              current_len += sprintf(sd_temp + current_len, ", %d", received.RxData[i]);
+
+	        	  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ", %d\n", received.RxData[i]);
 	          }
+	          can_count++;
+	  }
 
-	          // 5. 문단 나누기 (1행 종료)
-	          current_len += sprintf(sd_temp + current_len, "\n");
-
-	          // 6. 화면 출력
-	          printf("CAN %lx : %s", received.RxHeader.StdId, sd_temp);
-
-	          // 7. SD 카드 저장
-	          SD_WriteFile(sd_temp, current_len);
-			  Classifier(&VS, received);
-	      }
-
-	  if(GPS.dec_latitude != GPS_prev_lat || GPS.dec_longitude != GPS_prev_lon)
+	  // GPS (10Hz)
+	  remain = sizeof(sd_temp) - current_len;
+	  if (remain >= 128)
 	  {
-		  // 1. 변수 초기화
-		  current_len = 0;
+		  if(GPS.dec_latitude != GPS_prev_lat || GPS.dec_longitude != GPS_prev_lon)
+		  {
+			  get_time();
+			  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
 
-		  // 2. 시간 쓰기
-          current_len += sprintf(sd_temp, "%02x:%02x:%02x.%03x", current_Hours, current_Minutes,
-        		  	  	  	  	  	  	  	  	  	  	  	  current_Seconds, current_SubSeconds);
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
 
-		  // 3. GPS 인덱스 쓰기
-		  current_len += sprintf(sd_temp + current_len, ", GPS");
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ", GPS, %f, %f\n",
+					  GPS.dec_latitude,
+					  GPS.dec_longitude);
 
-		  // 4. 데이터 쓰기
-		  current_len += sprintf(sd_temp + current_len, ", %f, %f",
-				  GPS.dec_latitude,
-				  GPS.dec_longitude);
+			  //printf("GPS : %s", sd_temp);
 
-		  // 5. 문단 나누기 (1행 종료)
-		  current_len += sprintf(sd_temp + current_len, "\n");
+			  if(get_line_intersection(GPS_prev_lat, GPS_prev_lon,
+					  	  	  	  GPS.dec_latitude, GPS.dec_longitude))
+			  {
+				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+				  			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ", LAP, %d, %u\n",
+						  	  	  	  	  laps, lap_time);
+			  }
 
-		  // 6. 화면 출력
-  	  	  printf("GPS : %s", sd_temp);
-
-  	  	  // 7. SD 카드 저장
-  	  	  SD_WriteFile(sd_temp, current_len);
-
-  	  	  // 8. GPS 데이터 임시 저장 후 비교
-  	  	  GPS_prev_lat = GPS.dec_latitude;
-  	  	  GPS_prev_lon = GPS.dec_longitude;
+			  // 8. GPS 데이터 임시 저장 후 비교
+			  GPS_prev_lat = GPS.dec_latitude;
+			  GPS_prev_lon = GPS.dec_longitude;
+		  }
 	  }
 
-	  if(HAL_GetTick() - imu_prev_tick >= 100) {
-		  // 0. IMU 데이터 읽기
-		  imu_prev_tick = HAL_GetTick();
+	  // Laps
+	  VS.laps = laps;
+	  VS.lap_time = (uint32_t)(HAL_GetTick() - pre_tick);
 
-	      MPU9250_ReadAcc(&myMPU);
-	      MPU9250_ReadGyro(&myMPU);
-	      MPU9250_ReadMag(&myMPU);
 
-		  cal_gyro[0] = myMPU.gyro[0] - gyro_bias[0];
-		  cal_gyro[1] = myMPU.gyro[1] - gyro_bias[1];
-		  cal_gyro[2] = myMPU.gyro[2] - gyro_bias[2];
+	  // IMU (200Hz)
+	  remain = sizeof(sd_temp) - current_len;
+	  if (remain >= 128) {
+		  if(HAL_GetTick() - imu_prev_tick >= 5) {
+			  // 0. IMU 데이터 읽기
+			  imu_prev_tick = HAL_GetTick();
 
-		  cal_mag[0] = myMPU.mag[0] - mag_bias[0];
-		  cal_mag[1] = myMPU.mag[1] - mag_bias[1];
-		  cal_mag[2] = myMPU.mag[2] - mag_bias[2];
+			  MPU9250_ReadAcc(&myMPU);
+			  MPU9250_ReadGyro(&myMPU);
 
-		  // 1. 변수 초기화
-		  current_len = 0;
+			  cal_gyro[0] = myMPU.gyro[0] - gyro_bias[0];
+			  cal_gyro[1] = myMPU.gyro[1] - gyro_bias[1];
+			  cal_gyro[2] = myMPU.gyro[2] - gyro_bias[2];
 
-		  // 2. 시간 쓰기
-          current_len += sprintf(sd_temp, "%02x:%02x:%02x.%03x", current_Hours, current_Minutes,
-        		  	  	  	  	  	  	  	  	  	  	  	  current_Seconds, current_SubSeconds);
+			  get_time();
+			  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
 
-		  // 3. IMU 인덱스 쓰기
-		  current_len += sprintf(sd_temp + current_len, ", IMU");
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
 
-		  // 4. 데이터 쓰기
-		  current_len += sprintf(sd_temp + current_len,
-				  ", %f, %f, %f, %f, %f, %f, %f, %f, %f",
-				  myMPU.acc[0], myMPU.acc[1], myMPU.acc[2],
-				  cal_gyro[0], cal_gyro[1], cal_gyro[2],
-				  cal_mag[0], cal_mag[1], cal_mag[2]);
 
-		  // 5. 문단 나누기 (1행 종료)
-		  current_len += sprintf(sd_temp + current_len, "\n");
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
+					  ", IMU, %f, %f, %f, %f, %f, %f\n",
+					  myMPU.acc[0], myMPU.acc[1], myMPU.acc[2],
+					  cal_gyro[0], cal_gyro[1], cal_gyro[2]);
 
-		  // 6. 화면 출력
-		  //printf("IMU : %s", sd_temp);
-
-		  // 7. SD 카드 저장
-		  SD_WriteFile(sd_temp, current_len);
-		  VehicleState_set_lat_g(&VS,  (uint16_t)(myMPU.acc[0] * 10.0f + 30.0f));
-		  VehicleState_set_long_g(&VS, (uint16_t)(myMPU.acc[1] * 10.0f + 30.0f));
+			  VehicleState_set_lat_g(&VS,  (uint16_t)(myMPU.acc[0] * 10.0f + 30.0f));
+			  VehicleState_set_long_g(&VS, (uint16_t)(myMPU.acc[1] * 10.0f + 30.0f));
+		  }
 	  }
 
-	  if (HAL_GetTick() - sd_prev_tick >= 1000)
+	  // MAGNETOMETER (100Hz)
+	  remain = sizeof(sd_temp) - current_len;
+	  if (remain >= 128) {
+	  	if(HAL_GetTick() - mag_prev_tick >= 10) {
+	  		mag_prev_tick = HAL_GetTick();
+
+	  	    MPU9250_ReadMag(&myMPU);
+
+	  		cal_mag[0] = myMPU.mag[0] - mag_bias[0];
+	  		cal_mag[1] = myMPU.mag[1] - mag_bias[1];
+	  		cal_mag[2] = myMPU.mag[2] - mag_bias[2];
+
+
+	  		get_time();
+	  		float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+
+	  		current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+	  			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+
+
+	  		current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,", MAG, %f, %f, %f\n",
+	  					  	  	  	cal_mag[0], cal_mag[1], cal_mag[2]);
+	    }
+	  }
+
+	  // SD카드 동기롸
+	  if (current_len >= 512 || HAL_GetTick() - sd_prev_tick >= 1000)
 	  {
-		  SD_SaveFile();
-		  sd_prev_tick = HAL_GetTick();
+		  if(current_len > 0) {
+			  SD_WriteFile(sd_temp, current_len);
+			  current_len = 0;
+			  sync_pending = 1;
+			  sd_prev_tick = HAL_GetTick();
+		  }
 
+		  if (HAL_GetTick() - sync_prev_tick >= 5000) {
+		      if (sync_pending) {
+		          SD_SaveFile();
+		          sync_pending = 0;
+		          sync_count++;
+		      }
+		      sync_prev_tick = HAL_GetTick();
+		  }
 	  }
+
+	  // APPS 판정
+	  APPS();
+	  VS.apps = get_p();
 
 	  DisplayTransmit_Transmit(&DISP);
-	  HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -462,13 +514,23 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 /* CallBack Function */
-
-// GPS Call Back (USART3) //
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-	if(huart == &huart3) GPS_UART_CallBack();
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART6) {   // 디스플레이 UART인지 확인
+        disp_dma_ready = 1;
+    }
 }
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART3) {
+        GPS_UART_CallBack();
+    }
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_PIN) {
+	if(GPIO_PIN == GPS_PPS_Pin) {
+		UTC_flag = 1;
+	}
+}
 /* USER CODE END 4 */
 
 /**
