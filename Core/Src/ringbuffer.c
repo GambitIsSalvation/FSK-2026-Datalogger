@@ -7,6 +7,8 @@ RxMessage ringbuffer[RINGBUFFER_SIZE]; // 링 버퍼 정의
 volatile uint8_t r_front = 0;
 volatile uint8_t r_end = 0;
 int16_t raw = 0;
+uint32_t overflow = 0;
+uint32_t called = 0;
 
 
 // Ring Buffer Functions //
@@ -15,9 +17,11 @@ int IsWriteAvailable(void) // 링 버퍼가 가득 차있는지 확인
 {
     if((r_front + 1) % RINGBUFFER_SIZE != r_end){
     	//printf("Write Available\n");
+    	called++;
         return 1;
     } else {
     	//printf("Ring buffer is full!\n");
+    	overflow++;
         return 0;
     }
 }
@@ -109,15 +113,23 @@ void Classifier(VehicleState* VS, RxMessage received)
 
 	// BMS Loging Data
 	case BMSRX_1:
+		//if(!checksum(&received)) break;
 		uint8_t hcv_1 = received.RxData[0];
 		uint8_t hcv_2 = received.RxData[1];
 		uint16_t hcv_raw = ((uint16_t)hcv_1 << 8) | hcv_2;
-		VS->hcv = hcv_raw / 100;
+		VS->hcv = hcv_raw;
 		VS->htp = received.RxData[2] * 10;
-		VS->soc = (uint16_t)(received.RxData[3] * 50);
+		VS->soc = received.RxData[3] / 2;
+
+		uint8_t lcv_1 = received.RxData[4];
+		uint8_t lcv_2 = received.RxData[5];
+		uint16_t lcv_raw = ((uint16_t)lcv_1 << 8) | lcv_2;
+		VS->lcv = lcv_raw;
+
 		break;
 
 	case BMSRX_2:
+		//if(!checksum(&received)) break;
 		VS->bms_error = ((uint32_t)received.RxData[0])
 						| ((uint32_t)received.RxData[1] << 8)
 						| ((uint32_t)received.RxData[2] << 16)

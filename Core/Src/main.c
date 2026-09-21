@@ -76,10 +76,17 @@ double gyro_bias[3] = {0, 0, 0};
 double mag_bias[3] = {0, 0, 0};
 double cal_gyro[3];
 double cal_mag[3];
+
+// Linear //
+int32_t linear_bias[2] = {0, 0};
+
+// prev tick //
 static uint32_t imu_prev_tick = 0;
 static uint32_t mag_prev_tick = 0;
 static uint32_t sd_prev_tick = 0;
 static uint32_t sync_prev_tick = 0;
+static uint32_t linear_prev_tick = 0;
+static uint32_t ped_prev_tick = 0;
 volatile uint8_t sync_pending = 0;
 
 
@@ -102,6 +109,7 @@ extern uint8_t disp_dma_ready;
 extern uint8_t laps;
 extern uint32_t lap_time;
 extern uint32_t pre_tick;
+extern volatile uint16_t advBuf[2];
 
 // RTC
 RTC_DateTypeDef sDate;
@@ -115,10 +123,17 @@ volatile int current_SubSeconds = 0;
 uint16_t sync_error = 0;
 
 uint32_t UTC_temp  = 0;
+uint32_t UTC_prev = 0;
 volatile uint8_t UTC_flag = 0;
+volatile uint8_t RTD_flag = 0;
 
 // Module Status
 uint8_t init_status = 0; // 0:CAN  1:SD  2:GPS  3:IMU 4: UTC
+uint8_t RTD_status = 0; // 0: RTD OFF, 1: RTD ON
+uint8_t UTC_status = 0; // 0 : UTC Unsynced, 1: UTC Synced
+
+extern float pos1;
+extern float pos2;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -146,6 +161,12 @@ int _write(int file, char *ptr, int len) // printf UART 출력
 // SDIO //
 void SD_Init(void) {
 	// 1. SD card Mount
+	HAL_GPIO_WritePin(SD_ON_GPIO_Port, SD_ON_Pin, GPIO_PIN_RESET);
+
+	HAL_Delay(500);
+
+	HAL_GPIO_WritePin(SD_ON_GPIO_Port, SD_ON_Pin, GPIO_PIN_SET);
+
 	res = f_mount(&fs, "", 1);
 	if (res != FR_OK) {
 		init_status |= (1 << 1);
@@ -170,10 +191,12 @@ void SD_SaveFile(void){
 	res = f_sync(&file);
 	if (res == FR_OK) {
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+		//HAL_GPIO_WritePin(APPS_OUT_GPIO_Port, APPS_OUT_Pin, GPIO_PIN_SET);
 		//printf("Sync Complete!\n");
 	} else {
 		//printf("Sync Failed! Error Code : %d\n", res);
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+		//HAL_GPIO_WritePin(APPS_OUT_GPIO_Port, APPS_OUT_Pin, GPIO_PIN_RESET);
 		Error_Handler();
 	}
 }
@@ -234,9 +257,10 @@ int main(void)
   MX_USART3_UART_Init();
   MX_I2C1_Init();
   MX_SPI2_Init();
-  MX_ADC1_Init();
   MX_USART6_UART_Init();
   MX_IWDG_Init();
+  MX_ADC2_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
   HAL_Delay(250);
 
@@ -250,38 +274,74 @@ int main(void)
   GPS_Init();
 
   // MPU Init
-  MPU_Init(&myMPU);
+  //MPU_Init(&myMPU);
+
+  // Linear Sensor Init
+  //Linear_Init();
+
+  // APPS Init
+  APPS_Init();
+
+  HAL_IWDG_Refresh(&hiwdg);
+  if(init_status != 0) {
+	  Error_Handler();
+  }
 
   // Logging Start
   get_time();
   float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
 
   current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
-		  "%02x:%02x:%02x.%03d, SYSTEM, CONFIG ON, %d\n",
+		  "%02x:%02x:%02x.%03d,SYSTEM,CONFIG ON,%d\n",
 		  sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000), init_status);
 
   DisplayTransmit_Init(&DISP, &VS);
 
+  // IMU, Linear Calibration
+  uint16_t CAL_count = 1000;
+  while(CAL_count >0)
+  {
+	  CAL_count--;
+
+	  MPU9250_ReadGyro(&myMPU);
+
+	  gyro_bias[0] += myMPU.gyro[0];
+	  gyro_bias[1] += myMPU.gyro[1];
+	  gyro_bias[2] += myMPU.gyro[2];
+
+	  //linear_bias[0] += advBuf[0];
+	  //linear_bias[1] += advBuf[1];
+
+  }
+
+  gyro_bias[0] = gyro_bias[0] / 1000;
+  gyro_bias[1] = gyro_bias[1] / 1000;
+  gyro_bias[2] = gyro_bias[2] / 1000;
+
+  //linear_bias[0] = linear_bias[0] / 1000;
+  //linear_bias[1] = linear_bias[1] / 1000;
+
 
   //모컨 통신속도 제어
-  /*
-  uint8_t dat0[3] ={0x3D, 0x32, 0x0A};
+
+  uint8_t dat0[3] ={0x3D, 0x32, 0xFF};
   uint8_t dat1[3] ={0x3D, 0x30, 0x0A};
-  uint8_t dat2[3] ={0x3D, 0x22, 0x64};
-  uint8_t dat3[3] ={0x3D, 0x27, 0x64};
-  uint8_t dat4[3] ={0x3D, 0x8A, 0x64};
-  uint8_t dat5[3] ={0x3D, 0x66, 0x64};
+  uint8_t dat2[3] ={0x3D, 0x22, 0xFF};
+  uint8_t dat3[3] ={0x3D, 0x27, 0xFF};
+  uint8_t dat4[3] ={0x3D, 0x8A, 0xFF};
+  uint8_t dat5[3] ={0x3D, 0x66, 0xFF};
   uint8_t dat6[3] ={0x3D, 0x49, 0x64};
   uint8_t dat7[3] ={0x3D, 0x4A, 0x64};
-  CAN_Send_Blocking(&hcan1, MOTOTX, dat0, 3);
+
+  //CAN_Send_Blocking(&hcan1, MOTOTX, dat0, 3);
   CAN_Send_Blocking(&hcan1, MOTOTX, dat1, 3);
-  CAN_Send_Blocking(&hcan1, MOTOTX, dat2, 3);
-  CAN_Send_Blocking(&hcan1, MOTOTX, dat3, 3);
-  CAN_Send_Blocking(&hcan1, MOTOTX, dat4, 3);
-  CAN_Send_Blocking(&hcan1, MOTOTX, dat5, 3);
+  //CAN_Send_Blocking(&hcan1, MOTOTX, dat2, 3);
+  //CAN_Send_Blocking(&hcan1, MOTOTX, dat3, 3);
+  //CAN_Send_Blocking(&hcan1, MOTOTX, dat4, 3);
+  //CAN_Send_Blocking(&hcan1, MOTOTX, dat5, 3);
   CAN_Send_Blocking(&hcan1, MOTOTX, dat6, 3);
   CAN_Send_Blocking(&hcan1, MOTOTX, dat7, 3);
-  */
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -290,43 +350,84 @@ int main(void)
   {
 	  HAL_IWDG_Refresh(&hiwdg);
 
+	  // RTD 체크
+	  /*
+	  RTD_flag = HAL_GPIO_ReadPin(RTD_LED_5V_GPIO_Port,RTD_LED_5V_Pin);
+	  if(RTD_flag != RTD_status){
+		  RTD_status = RTD_flag;
+
+		  get_time();
+		  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+
+		  if(RTD_status == 1) {
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
+					  	  	  "%02x:%02x:%02x.%03d,SYSTEM,RTD ON\n",
+			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+		  } else if(RTD_status == 0) {
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
+					  	  	  "%02x:%02x:%02x.%03d,SYSTEM,RTD OFF\n",
+			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+		  }
+	  }
+	  */
+
+	  RTD_status = 1;
+
 	  // UTC - RTC 동기화
 	  if(UTC_flag) {
-		  UTC_temp = GPS.utc_time;
-		  sTime.Hours = RTC_ByteToBcd2(UTC_temp / 10000 + 9);
-		  sTime.Minutes = RTC_ByteToBcd2((UTC_temp / 100) % 100);
-		  sTime.Seconds = RTC_ByteToBcd2(UTC_temp % 100 + 1);
-		  sTime.SubSeconds = 0;
-		  if(HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD) == HAL_OK) { UTC_flag = 0; }
-		  if(!init_status) {
-			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
-					  "%02x:%02x:%02x.%03d, SYSTEM, RTC-UTC SYNC\n",
-					  sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
-			  init_status |= 1<<4;
-		  }
+	      UTC_temp = GPS.utc_time;
+
+	      if(UTC_temp != UTC_prev && GPS.utc_time != 0) {
+	          UTC_prev = UTC_temp;
+
+	          uint32_t h = UTC_temp / 10000;
+	          uint32_t m = (UTC_temp / 100) % 100;
+	          uint32_t s = UTC_temp % 100;
+
+	          s += 1;                          // PPS = 직전 초 +1
+	          if(s >= 60) { s -= 60; m++; }
+	          if(m >= 60) { m -= 60; h++; }
+	          h += 9;                          // KST (UTC+9)
+	          if(h >= 24) { h -= 24; }         // 날짜는 안 넘김 (주의)
+
+	          sTime.Hours   = RTC_ByteToBcd2(h);
+	          sTime.Minutes = RTC_ByteToBcd2(m);
+	          sTime.Seconds = RTC_ByteToBcd2(s);
+	          sTime.SubSeconds = 0;
+
+	          HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD);
+	          if(!init_status) {
+	              current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
+	                      "%02x:%02x:%02x.%03d,SYSTEM,RTC-UTC SYNC\n",
+	                      sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+	              init_status |= 1<<4;
+	          }
+	      }
+	      UTC_flag = 0;
 	  }
 
 	  // CAN Messages
 	  can_count = 0;
 	  while(IsPopAvailable() && can_count < 32)
 	  {
-		  	  get_time();
-		  	  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
-	          RxMessage received = RingPop();
-		  	  Classifier(&VS, received);
+		  get_time();
+		  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+	      RxMessage received = RingPop();
+		  Classifier(&VS, received);
+		  if(RTD_status) {
+			  remain = sizeof(sd_temp) - current_len;
+			  if (remain < 128) break;
 
-		  	  remain = sizeof(sd_temp) - current_len;
-		  	  if (remain < 128) break;
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+						sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
 
-		  	  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
-		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
-
-	          current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ", %lx", received.RxHeader.StdId);
-	          for(int i = 0; i < received.RxHeader.DLC; i++) {
-
-	        	  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ", %d\n", received.RxData[i]);
-	          }
-	          can_count++;
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ",%lx", received.RxHeader.StdId);
+			  for(int i = 0; i < received.RxHeader.DLC; i++) {
+				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ",%d", received.RxData[i]);
+				  }
+			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ",\n");
+			  can_count++;
+		  }
 	  }
 
 	  // GPS (10Hz)
@@ -335,25 +436,26 @@ int main(void)
 	  {
 		  if(GPS.dec_latitude != GPS_prev_lat || GPS.dec_longitude != GPS_prev_lon)
 		  {
-			  get_time();
-			  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+			  if(RTD_status) {
+				  get_time();
+				  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
 
-			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
-			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
-
-			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ", GPS, %f, %f\n",
-					  GPS.dec_latitude,
-					  GPS.dec_longitude);
-
-			  //printf("GPS : %s", sd_temp);
-
-			  if(get_line_intersection(GPS_prev_lat, GPS_prev_lon,
-					  	  	  	  GPS.dec_latitude, GPS.dec_longitude))
-			  {
 				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
-				  			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
-				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ", LAP, %d, %u\n",
-						  	  	  	  	  laps, lap_time);
+									sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+
+				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ",GPS,%f,%f,%f\n",
+						  GPS.dec_latitude, GPS.dec_longitude, GPS.course_t);
+
+				  //printf("GPS : %s", sd_temp);
+
+				  if(get_line_intersection(GPS_prev_lat, GPS_prev_lon,
+									  GPS.dec_latitude, GPS.dec_longitude))
+				  {
+					  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+													sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+					  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, ",LAP,%d,%u\n",
+											  laps, lap_time);
+				  }
 			  }
 
 			  // 8. GPS 데이터 임시 저장 후 비교
@@ -361,18 +463,18 @@ int main(void)
 			  GPS_prev_lon = GPS.dec_longitude;
 		  }
 	  }
-
+/*
 	  // Laps
 	  VS.laps = laps;
 	  VS.lap_time = (uint32_t)(HAL_GetTick() - pre_tick);
-
+*/
 
 	  // IMU (200Hz)
 	  remain = sizeof(sd_temp) - current_len;
 	  if (remain >= 128) {
 		  if(HAL_GetTick() - imu_prev_tick >= 5) {
 			  // 0. IMU 데이터 읽기
-			  imu_prev_tick = HAL_GetTick();
+			  imu_prev_tick += 5;
 
 			  MPU9250_ReadAcc(&myMPU);
 			  MPU9250_ReadGyro(&myMPU);
@@ -381,18 +483,19 @@ int main(void)
 			  cal_gyro[1] = myMPU.gyro[1] - gyro_bias[1];
 			  cal_gyro[2] = myMPU.gyro[2] - gyro_bias[2];
 
-			  get_time();
-			  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+			  if(RTD_status) {
+				  get_time();
+				  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
 
-			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
-			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+									sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
 
 
-			  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
-					  ", IMU, %f, %f, %f, %f, %f, %f\n",
-					  myMPU.acc[0], myMPU.acc[1], myMPU.acc[2],
-					  cal_gyro[0], cal_gyro[1], cal_gyro[2]);
-
+				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
+						  ",IMU,%f,%f,%f,%f,%f,%f\n",
+						  myMPU.acc[0], myMPU.acc[1], myMPU.acc[2],
+						  cal_gyro[0], cal_gyro[1], cal_gyro[2]);
+			  }
 			  VehicleState_set_lat_g(&VS,  (uint16_t)(myMPU.acc[0] * 10.0f + 30.0f));
 			  VehicleState_set_long_g(&VS, (uint16_t)(myMPU.acc[1] * 10.0f + 30.0f));
 		  }
@@ -402,7 +505,7 @@ int main(void)
 	  remain = sizeof(sd_temp) - current_len;
 	  if (remain >= 128) {
 	  	if(HAL_GetTick() - mag_prev_tick >= 10) {
-	  		mag_prev_tick = HAL_GetTick();
+	  		mag_prev_tick += 10;
 
 	  	    MPU9250_ReadMag(&myMPU);
 
@@ -410,18 +513,72 @@ int main(void)
 	  		cal_mag[1] = myMPU.mag[1] - mag_bias[1];
 	  		cal_mag[2] = myMPU.mag[2] - mag_bias[2];
 
+	  		if(RTD_status) {
+				get_time();
+				float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
 
-	  		get_time();
-	  		float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
-
-	  		current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
-	  			  		  			sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+				current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+										sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
 
 
-	  		current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,", MAG, %f, %f, %f\n",
-	  					  	  	  	cal_mag[0], cal_mag[1], cal_mag[2]);
+				current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,",MAG,%f,%f,%f\n",
+										cal_mag[0], cal_mag[1], cal_mag[2]);
+	  		}
 	    }
 	  }
+/*
+
+	  // Linear Sensor
+	  remain = sizeof(sd_temp) - current_len;
+	  if (remain >= 128) {
+		  if(HAL_GetTick() - linear_prev_tick >= 5) {
+			  linear_prev_tick += 5;
+
+			  if(RTD_status) {
+				  get_time();
+				  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+
+				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+										sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+
+
+				  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,",LIN,%f,%f\n",
+							(float)(advBuf[0] - linear_bias[0]) * 75.0f / 4095.0f,
+							(float)(advBuf[1] - linear_bias[1]) * 75.0f / 4095.0f);
+			  }
+		  }
+	  }
+
+	  // Brake, APPS (100Hz)
+
+	  remain = sizeof(sd_temp) - current_len;
+	  if (remain >= 128) {
+	  	if(HAL_GetTick() - ped_prev_tick >= 5) {
+	  		ped_prev_tick += 5;
+
+	  	    // APPS 판정
+	  	    APPS();
+	  	    VS.apps = get_p();
+
+	  		if(RTD_status) {
+				get_time();
+				float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+
+				current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len, "%02x:%02x:%02x.%03d",
+										sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000));
+
+
+				current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,",PED,%d\n",
+										HAL_GPIO_ReadPin(BRAKE_5V_GPIO_Port,BRAKE_5V_Pin));
+
+	  		}
+
+
+	    }
+	  }
+
+*/
+
 
 	  // SD카드 동기롸
 	  if (current_len >= 512 || HAL_GetTick() - sd_prev_tick >= 1000)
@@ -443,10 +600,7 @@ int main(void)
 		  }
 	  }
 
-	  // APPS 판정
-	  APPS();
-	  VS.apps = get_p();
-
+	  // 디스플레이 전송
 	  DisplayTransmit_Transmit(&DISP);
     /* USER CODE END WHILE */
 
@@ -472,9 +626,8 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI
-                              |RCC_OSCILLATORTYPE_LSE;
-  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
+  RCC_OscInitStruct.LSEState = RCC_LSE_OFF;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
@@ -541,8 +694,17 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+  get_time();
+  float subsec = (float)(255 - sTime.SubSeconds) / 256.0f;
+  current_len += snprintf(sd_temp + current_len, sizeof(sd_temp) - current_len,
+			  "%02x:%02x:%02x.%03d,SYSTEM,CONFIG FAIL,%d\n",
+			  sTime.Hours, sTime.Minutes, sTime.Seconds, (int)(subsec*1000), init_status);
+  SD_WriteFile(sd_temp, current_len);
+  SD_SaveFile();
+
   while (1)
   {
+
   }
   /* USER CODE END Error_Handler_Debug */
 }

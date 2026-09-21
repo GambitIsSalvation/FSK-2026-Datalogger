@@ -1,0 +1,12 @@
+../Core/Src/ADS1015_ADS1115.c:19:13:writeRegister	32	static
+../Core/Src/ADS1015_ADS1115.c:25:17:readRegister	32	static
+../Core/Src/ADS1015_ADS1115.c:33:13:ADSbegin	16	static
+../Core/Src/ADS1015_ADS1115.c:40:6:ADS1015	24	static
+../Core/Src/ADS1015_ADS1115.c:50:6:ADS1115	24	static
+../Core/Src/ADS1015_ADS1115.c:73:6:ADSsetGain	16	static
+../Core/Src/ADS1015_ADS1115.c:78:11:ADSgetGain	16	static
+../Core/Src/ADS1015_ADS1115.c:83:10:ADSreadADC_SingleEnded	24	static
+../Core/Src/ADS1015_ADS1115.c:135:9:ADSreadADC_Differential_0_1	24	static
+../Core/Src/ADS1015_ADS1115.c:180:9:ADSreadADC_Differential_2_3	24	static
+../Core/Src/ADS1015_ADS1115.c:226:6:ADSstartComparator_SingleEnded	24	static
+../Core/Src/ADS1015_ADS1115.c:268:9:ADSgetLastConversionResults	24	static

@@ -1,3 +1,4 @@
+"./Core/Src/ADS1015_ADS1115.o"
 "./Core/Src/APPS.o"
 "./Core/Src/CrossDetect.o"
 "./Core/Src/DisplayTransmit.o"

@@ -34,6 +34,7 @@ typedef struct {
     uint16_t soc;
     uint16_t htp;
     uint16_t hcv;
+    uint16_t lcv;
 	//Motor
     int16_t rpm;
     uint16_t mtr_temp;
@@ -44,9 +45,9 @@ typedef struct {
     uint16_t long_g;
     uint16_t laps;
     uint32_t lap_time;
+
     /************* 데이터 로깅용 ***************/
     //BMS
-    uint16_t lcv; // Lowest Cell Voltage
     uint16_t ltp; // Lowest Temperature
     uint16_t current; // Pack Current
     uint16_t voltage; // Pack Voltage
@@ -78,6 +79,7 @@ void VehicleState_set_mtr_temp(VehicleState* self, uint16_t val);
 void VehicleState_set_ctrl_temp(VehicleState* self, uint16_t val);
 void VehicleState_set_htp(VehicleState* self, uint16_t val);
 void VehicleState_set_hcv(VehicleState* self, uint16_t val);
+void VehicleState_set_lcv(VehicleState* self, uint16_t val);
 void VehicleState_set_lat_g(VehicleState* self, uint16_t val);
 void VehicleState_set_long_g(VehicleState* self, uint16_t val);
 void VehicleState_set_laps(VehicleState* self, uint16_t val);
@@ -91,6 +93,7 @@ uint16_t VehicleState_get_mtr_temp(const VehicleState* self);
 uint16_t VehicleState_get_ctrl_temp(const VehicleState* self);
 uint16_t VehicleState_get_htp(const VehicleState* self);
 uint16_t VehicleState_get_hcv(const VehicleState* self);
+uint16_t VehicleState_get_lcv(const VehicleState* self);
 uint16_t VehicleState_get_lat_g(const VehicleState* self);
 uint16_t VehicleState_get_long_g(const VehicleState* self);
 uint16_t VehicleState_get_laps(const VehicleState* self);

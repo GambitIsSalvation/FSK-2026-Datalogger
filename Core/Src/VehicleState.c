@@ -27,6 +27,7 @@ void VehicleState_Init(VehicleState* self)
     self->ctrl_temp = 0;
     self->htp = 0;
     self->hcv = 0;
+    self->lcv = 0;
     self->lat_g = 30;   // 0G 기준 오프셋
     self->long_g = 30;  // 0G 기준 오프셋
     self->laps = 1;
@@ -52,6 +53,7 @@ void VehicleState_set_mtr_temp(VehicleState* self, uint16_t val)  { self->mtr_te
 void VehicleState_set_ctrl_temp(VehicleState* self, uint16_t val) { self->ctrl_temp = val; }
 void VehicleState_set_htp(VehicleState* self, uint16_t val)       { self->htp = val; }
 void VehicleState_set_hcv(VehicleState* self, uint16_t val)       { self->hcv = val; }
+void VehicleState_set_lcv(VehicleState* self, uint16_t val)       { self->lcv = val; }
 void VehicleState_set_lat_g(VehicleState* self, uint16_t val)     { self->lat_g = val; }
 void VehicleState_set_long_g(VehicleState* self, uint16_t val)    { self->long_g = val; }
 void VehicleState_set_laps(VehicleState* self, uint16_t val)      { self->laps = val; }
@@ -65,6 +67,7 @@ uint16_t VehicleState_get_mtr_temp(const VehicleState* self)  { return self->mtr
 uint16_t VehicleState_get_ctrl_temp(const VehicleState* self) { return self->ctrl_temp; }
 uint16_t VehicleState_get_htp(const VehicleState* self)       { return self->htp; }
 uint16_t VehicleState_get_hcv(const VehicleState* self)       { return self->hcv; }
+uint16_t VehicleState_get_lcv(const VehicleState* self)		  { return self->lcv; }
 uint16_t VehicleState_get_lat_g(const VehicleState* self)     { return self->lat_g; }
 uint16_t VehicleState_get_long_g(const VehicleState* self)    { return self->long_g; }
 uint16_t VehicleState_get_laps(const VehicleState* self)      { return self->laps; }

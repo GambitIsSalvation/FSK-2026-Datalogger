@@ -66,8 +66,6 @@ void Error_Handler(void);
 #define SD_MISO_GPIO_Port GPIOC
 #define APPS1_Pin GPIO_PIN_0
 #define APPS1_GPIO_Port GPIOA
-#define APPS2_Pin GPIO_PIN_1
-#define APPS2_GPIO_Port GPIOA
 #define SERIAL_TX_Pin GPIO_PIN_2
 #define SERIAL_TX_GPIO_Port GPIOA
 #define SERIAL_RX_Pin GPIO_PIN_3
@@ -76,10 +74,14 @@ void Error_Handler(void);
 #define APPS_OUT_GPIO_Port GPIOA
 #define LD2_Pin GPIO_PIN_5
 #define LD2_GPIO_Port GPIOA
+#define LINEAR_FR_Pin GPIO_PIN_6
+#define LINEAR_FR_GPIO_Port GPIOA
+#define LINEAR_FL_Pin GPIO_PIN_7
+#define LINEAR_FL_GPIO_Port GPIOA
 #define GPS_RX_Pin GPIO_PIN_5
 #define GPS_RX_GPIO_Port GPIOC
-#define GPS_TX_Pin GPIO_PIN_10
-#define GPS_TX_GPIO_Port GPIOB
+#define SD_SCK_Pin GPIO_PIN_13
+#define SD_SCK_GPIO_Port GPIOB
 #define DISPLAY_TX_Pin GPIO_PIN_6
 #define DISPLAY_TX_GPIO_Port GPIOC
 #define DISPLAY_RX_Pin GPIO_PIN_7
@@ -89,18 +91,24 @@ void Error_Handler(void);
 #define GPS_PPS_EXTI_IRQn EXTI9_5_IRQn
 #define SD_CS_Pin GPIO_PIN_8
 #define SD_CS_GPIO_Port GPIOA
-#define SD_SCK_Pin GPIO_PIN_9
-#define SD_SCK_GPIO_Port GPIOA
 #define TMS_Pin GPIO_PIN_13
 #define TMS_GPIO_Port GPIOA
 #define TCK_Pin GPIO_PIN_14
 #define TCK_GPIO_Port GPIOA
+#define GPS_TX_Pin GPIO_PIN_10
+#define GPS_TX_GPIO_Port GPIOC
+#define BRAKE_5V_Pin GPIO_PIN_11
+#define BRAKE_5V_GPIO_Port GPIOC
+#define RTD_LED_5V_Pin GPIO_PIN_2
+#define RTD_LED_5V_GPIO_Port GPIOD
 #define SWO_Pin GPIO_PIN_3
 #define SWO_GPIO_Port GPIOB
 #define IMU_SCL_Pin GPIO_PIN_6
 #define IMU_SCL_GPIO_Port GPIOB
 #define IMU_SDA_Pin GPIO_PIN_7
 #define IMU_SDA_GPIO_Port GPIOB
+#define SD_ON_Pin GPIO_PIN_8
+#define SD_ON_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

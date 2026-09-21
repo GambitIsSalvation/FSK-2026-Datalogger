@@ -28,28 +28,32 @@ void DisplayTransmit_Packing(DisplayTransmit* self)
     temp = VehicleState_get_rpm(self->VS);
     buf[2] = (uint8_t)(temp >> 8);
     buf[3] = (uint8_t)(temp);
-
+/*
     temp = VehicleState_get_apps(self->VS);
     buf[4] = (uint8_t)(temp >> 8);
     buf[5] = (uint8_t)(temp);
-
+*/
     temp = VehicleState_get_soc(self->VS);
+    buf[4] = (uint8_t)(temp >> 8);
+    buf[5] = (uint8_t)(temp);
+
+    temp = VehicleState_get_mtr_temp(self->VS);
     buf[6] = (uint8_t)(temp >> 8);
     buf[7] = (uint8_t)(temp);
 
-    temp = VehicleState_get_mtr_temp(self->VS);
+    temp = VehicleState_get_ctrl_temp(self->VS);
     buf[8] = (uint8_t)(temp >> 8);
     buf[9] = (uint8_t)(temp);
 
-    temp = VehicleState_get_ctrl_temp(self->VS);
+    temp = VehicleState_get_htp(self->VS);
     buf[10] = (uint8_t)(temp >> 8);
     buf[11] = (uint8_t)(temp);
 
-    temp = VehicleState_get_htp(self->VS);
+    temp = VehicleState_get_hcv(self->VS);
     buf[12] = (uint8_t)(temp >> 8);
     buf[13] = (uint8_t)(temp);
 
-    temp = VehicleState_get_hcv(self->VS);
+    temp = VehicleState_get_lcv(self->VS);
     buf[14] = (uint8_t)(temp >> 8);
     buf[15] = (uint8_t)(temp);
 
@@ -61,6 +65,7 @@ void DisplayTransmit_Packing(DisplayTransmit* self)
     buf[18] = (uint8_t)(temp >> 8);
     buf[19] = (uint8_t)(temp);
 
+    /*
     temp = VehicleState_get_laps(self->VS);
     buf[20] = (uint8_t)(temp >> 8);
     buf[21] = (uint8_t)(temp);
@@ -70,7 +75,7 @@ void DisplayTransmit_Packing(DisplayTransmit* self)
     buf[23] = (uint8_t)(temp >> 16);
     buf[24] = (uint8_t)(temp >> 8);
     buf[25] = (uint8_t)(temp);
-
+*/
     // buf[26], buf[27] 체크섬 추가 예정
 }
 

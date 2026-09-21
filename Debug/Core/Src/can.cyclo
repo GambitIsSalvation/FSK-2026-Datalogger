@@ -4,3 +4,4 @@
 ../Core/Src/can.c:137:6:CAN_Config	4
 ../Core/Src/can.c:171:6:CAN_Send	2
 ../Core/Src/can.c:186:6:HAL_CAN_RxFifo0MsgPendingCallback	5
+../Core/Src/can.c:211:9:checksum	3

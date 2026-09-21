@@ -51,6 +51,9 @@ extern CAN_HandleTypeDef hcan1;
 #define T_CTRL      0x4A // 컨트롤러 온도
 #define T_MOTOR     0x49 // 모터 온도
 
+#define CHECKSUM_FALSE  ((uint8_t)0x00)
+#define CHECKSUM_TRUE   ((uint8_t)0x01)
+
 typedef struct {
 	CAN_RxHeaderTypeDef RxHeader;
 	uint8_t RxData[8];

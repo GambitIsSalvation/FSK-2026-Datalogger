@@ -38,6 +38,7 @@
         * Output
         * EVENT_OUT
         * EXTI
+     PA0-WKUP   ------> ADCx_IN0
 */
 void MX_GPIO_Init(void)
 {
@@ -49,15 +50,25 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, APPS_OUT_Pin|LD2_Pin|SD_CS_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(SD_ON_GPIO_Port, SD_ON_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : APPS1_Pin */
+  GPIO_InitStruct.Pin = APPS1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(APPS1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : APPS_OUT_Pin LD2_Pin SD_CS_Pin */
   GPIO_InitStruct.Pin = APPS_OUT_Pin|LD2_Pin|SD_CS_Pin;
@@ -71,6 +82,25 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPS_PPS_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : BRAKE_5V_Pin */
+  GPIO_InitStruct.Pin = BRAKE_5V_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(BRAKE_5V_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : RTD_LED_5V_Pin */
+  GPIO_InitStruct.Pin = RTD_LED_5V_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(RTD_LED_5V_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : SD_ON_Pin */
+  GPIO_InitStruct.Pin = SD_ON_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(SD_ON_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);

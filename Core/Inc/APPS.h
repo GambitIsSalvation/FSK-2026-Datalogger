@@ -10,32 +10,30 @@
 #include <stdbool.h>
 #include "main.h"
 
-#ifndef INC_APPS_C_
-#define INC_APPS_C_
+#define ADS1115_MAX_CODE  32767.0f
+#define ADS1115_FSR       6.144f
 
-#define ADC_MAX			4095.0f
-#define ADC_VREF		3.3f	// 전압 기준값 (3.3V)
+#define APPS1_VALID_MIN  0.50f
+#define APPS1_VALID_MAX  4.50f
 
-#define APPS1_VALID_MIN	0.33f	// 위치 0%가 되는 전압 (0.33V)
-#define APPS1_VALID_MAX	2.97f	// 위치 100%가 되는 전압 (2.97V)
+#define APPS1_POS_MIN     0.50f
+#define APPS1_POS_MAX     3.10f
 
-#define APPS2_VALID_MIN	0.25f	// 위치 0%가 되는 전압 (0.25V)
-#define APPS2_VALID_MAX	2.25f	// 위치 100%가 되는 전압 (2.25V)
+#define APPS2_VALID_MIN  0.165f
+#define APPS2_VALID_MAX  1.485f
+
+#define APPS2_POS_MIN     0.165f
+#define APPS2_POS_MAX     1.045f
 
 #define DIFF_PCT		10.0f	// 10% 차이
 #define NONVALID_TIME	100u    // 100ms
-#define LOOP_PERIOD		1u      // 1ms 루프
+#define LOOP_PERIOD		5u      // 5ms 루프
 
-#define MOTOR_SIG_GPIO_Port GPIOA
-#define MOTOR_SIG_Pin GPIO_PIN_4
-
-typedef enum {
-	APPS_OK = 0,			// 정상
-	APPS_FAIL_FAILURE,		// 유효값이 아닌 전압
-	APPS_FAIL_IMPLAUSIBLE	// 비타당성
-} apps_state_t;
-
+float absf(float x);
+float adc_to_voltage(int16_t adc);
+float voltage_to_position(float voltage,float v_min,float v_max);
+uint8_t apps_process(void);
+void APPS_Init(void);
 void APPS (void);
 uint16_t get_p(void);
 
-#endif /* INC_APPS_C_ */
